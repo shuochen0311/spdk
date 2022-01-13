@@ -820,6 +820,60 @@ error_return:
 	return rc;
 }
 
+struct rescan_aio_bdev_ctx {
+	rescan_aio_bdev_complete cb_fn;
+	void *cb_arg;
+};
+
+static void
+aio_bdev_rescan_cb(void *arg, int bdeverrno)
+{
+	struct rescan_aio_bdev_ctx *ctx = arg;
+
+	ctx->cb_fn(ctx->cb_arg, bdeverrno);
+	free(ctx);	
+}
+
+void 
+bdev_aio_rescan(struct spdk_bdev *bdev, rescan_aio_bdev_complete cb_fn, void *cb_arg)
+{
+	struct file_disk *fdisk;
+	struct rescan_aio_bdev_ctx *ctx;
+	uint64_t disk_size, blockcnt;
+	int rc;
+
+	if (!bdev || bdev->module != &aio_if) {
+		cb_fn(cb_arg, -ENODEV);
+		return;
+	}
+
+	ctx = calloc(1, sizeof(*ctx));
+	if (ctx == NULL) {
+		cb_fn(cb_arg, -ENOMEM);
+		return;
+	}
+
+	fdisk = SPDK_CONTAINEROF(bdev, struct file_disk, disk);
+	disk_size = spdk_fd_get_size(fdisk->fd);
+	blockcnt = disk_size / fdisk->disk.blocklen;
+
+	if (fdisk->disk.blockcnt != blockcnt) {
+		SPDK_NOTICELOG("AIO device is resized: bdev name %s, old size %" PRIu64 ", new size %" PRIu64 "\n",
+				fdisk->filename,
+				fdisk->disk.blockcnt,
+				blockcnt);
+		rc = spdk_bdev_notify_blockcnt_change(&fdisk->disk, blockcnt);
+		if (rc != 0) {
+			SPDK_ERRLOG("Could not change num blocks for aio bdev: name %s, errno: %d.\n",
+				    fdisk->filename, rc);
+		}
+	}
+
+	ctx->cb_fn = cb_fn;
+	ctx->cb_arg = cb_arg;
+	aio_bdev_rescan_cb(ctx, 0);
+}
+
 struct delete_aio_bdev_ctx {
 	delete_aio_bdev_complete cb_fn;
 	void *cb_arg;

@@ -38,9 +38,11 @@
 #include "spdk/bdev.h"
 
 typedef void (*delete_aio_bdev_complete)(void *cb_arg, int bdeverrno);
+typedef void (*rescan_aio_bdev_complete)(void *cb_arg, int bdeverrno);
 
 int create_aio_bdev(const char *name, const char *filename, uint32_t block_size);
 
+void bdev_aio_rescan(struct spdk_bdev *bdev, delete_aio_bdev_complete cb_fn, void *cb_arg);
 void bdev_aio_delete(struct spdk_bdev *bdev, delete_aio_bdev_complete cb_fn, void *cb_arg);
 
 #endif /* SPDK_BDEV_AIO_H */
